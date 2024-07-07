@@ -3,11 +3,13 @@ import shutil
 import pickle
 from typing import Any, Dict, Callable, TypeVar
 
+from recommence.Config import CheckpointConfig
+
 T = TypeVar('T')
+
 class Checkpoint:
-    def __init__(self, save_path: str):
-        self.save_path: str = save_path
-        self._data_path: str = f'{save_path}/data.pkl'
+    def __init__(self, config: CheckpointConfig):
+        self._c = config
         self._data: Dict[str, Any] = {}
 
         self._load_if_exists()
@@ -27,20 +29,21 @@ class Checkpoint:
         return self._data[name]
 
     def save(self) -> None:
-        if not os.path.exists(self.save_path):
-            os.makedirs(self.save_path)
+        data_path = f'{self._c.save_path}/{self._c.data_file}'
+        os.makedirs(self._c.save_path, exist_ok=True)
 
-        with open(self._data_path, 'wb') as f:
+        with open(data_path, 'wb') as f:
             pickle.dump(self._data, f)
 
     def remove(self) -> None:
-        if os.path.exists(self.save_path):
-            shutil.rmtree(self.save_path)
-        return
+        target_path = self._c.save_path
+        if os.path.exists(target_path):
+            shutil.rmtree(target_path)
 
     def _load_if_exists(self) -> None:
-        if os.path.exists(self.save_path):
-            if os.path.exists(self._data_path):
-                with open(self._data_path, 'rb') as f:
-                    self._data = pickle.load(f)
-        return
+        data_path = f'{self._c.save_path}/{self._c.data_file}'
+        if not os.path.exists(data_path):
+            return
+
+        with open(data_path, 'rb') as f:
+            self._data = pickle.load(f)
