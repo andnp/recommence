@@ -1,6 +1,7 @@
 import os
 import pickle
 import shutil
+import atexit
 from typing import Any, Dict
 from concurrent.futures import ThreadPoolExecutor, Future
 from recommence.Config import CheckpointConfig
@@ -15,6 +16,8 @@ class StagedWriter(BaseWriter):
         self._write_future: Future | None = None
         self._exec = ThreadPoolExecutor(max_workers=1)
 
+        atexit.register(self.cleanup)
+
     def save(self, data: Dict[str, Any]) -> None:
         assert self._c.staging_path is not None
         os.makedirs(self._c.staging_path, exist_ok=True)
@@ -23,10 +26,11 @@ class StagedWriter(BaseWriter):
         with open(data_path, 'wb') as f:
             pickle.dump(data, f)
 
-        compress_dir(
-            input=self._c.staging_path,
-            target=self._c.save_path,
-        )
+        # trigger transfer to shared storage
+        if self._is_ongoing_transfer():
+            self.wait()
+
+        self._write_future = self._exec.submit(self._background_transfer)
 
     def maybe_load(self) -> Dict[str, Any] | None:
         assert self._c.staging_path is not None
@@ -54,3 +58,30 @@ class StagedWriter(BaseWriter):
         if os.path.exists(stage_path):
             shutil.rmtree(stage_path)
 
+    # ------------------------
+    # -- Background Writing --
+    # ------------------------
+
+    def _background_transfer(self):
+        assert self._c.staging_path is not None
+
+        compress_dir(
+            input=self._c.staging_path,
+            target=self._c.save_path,
+        )
+
+    def _is_ongoing_transfer(self):
+        return (
+            # if there is no future, then definitely not transferring
+            self._write_future is not None
+            # if there is a future and it is not done, then still transferring
+            and not self._write_future.done()
+        )
+
+    def wait(self):
+        if self._write_future is None: return
+        self._write_future.result()
+
+    def cleanup(self):
+        self.wait()
+        self._exec.shutdown(wait=True)
