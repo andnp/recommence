@@ -45,6 +45,7 @@ def test_checkpoint2(tmp_path):
     original_agent.weights[0] = 1
 
     chk.save()
+    chk.cleanup()
     del chk
     shutil.rmtree(tmp_path / 'stage')
 

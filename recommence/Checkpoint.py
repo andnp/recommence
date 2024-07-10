@@ -38,6 +38,9 @@ class Checkpoint:
     def remove(self) -> None:
         self._writer.remove()
 
+    def cleanup(self) -> None:
+        self._writer.cleanup()
+
     # -------------------
     # -- Configuration --
     # -------------------
